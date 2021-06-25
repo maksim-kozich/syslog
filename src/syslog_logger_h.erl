@@ -141,7 +141,8 @@ log_impl(LogEvent = #{level := Level, msg := Msg, meta := Metadata},
          #{formatter := {Fmt, FmtCfg}, config := HandlerCfg}) ->
     Pid = maps_get(pid, Metadata, self()),
     Time = maps_get(time, Metadata, os:timestamp()),
-    SD = structured_data(Msg, Metadata, HandlerCfg),
+    GlobalMetadata = maps_get(global_meta, HandlerCfg, #{}),
+    SD = structured_data(Msg, maps:merge(GlobalMetadata, Metadata), HandlerCfg),
     Overrides = overrides(Metadata, HandlerCfg),
     case Msg of
         {report, #{label := {supervisor, _}}} ->
