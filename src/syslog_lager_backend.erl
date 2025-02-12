@@ -71,6 +71,7 @@ set_log_level(Level) ->
           format_cfg      :: list(),
           sd_id           :: string() | undefined,
           metadata_keys   :: [atom()],
+          global_meta     :: proplists:proplist(),
           appname_key     :: atom() | undefined}).
 
 %%------------------------------------------------------------------------------
@@ -79,22 +80,23 @@ set_log_level(Level) ->
 init([]) ->
     init([syslog_lib:get_property(log_level, ?SYSLOG_LOGLEVEL)]);
 init([Level]) ->
-    init([Level, {}, {lager_default_formatter, ?CFG}]);
+    init([Level, {}, [], {lager_default_formatter, ?CFG}]);
 init([Level, {}, {Formatter, FormatterConfig}]) when is_atom(Formatter) ->
-    init([Level, {undefined, []}, {Formatter, FormatterConfig}]);
-init([Level, SData, {Formatter, FormatterConfig}])
+    init([Level, {undefined, []}, [], {Formatter, FormatterConfig}]);
+init([Level, SData, GlobalMetadata, {Formatter, FormatterConfig}])
   when is_atom(Formatter) ->
     AppnameKey = syslog_lib:get_name_metdata_key(),
-    init([Level, SData, {Formatter, FormatterConfig}, AppnameKey]);
-init([Level, {}, {Formatter, FormatterConfig}, AppnameKey])
+    init([Level, SData, GlobalMetadata, {Formatter, FormatterConfig}, AppnameKey]);
+init([Level, {}, GlobalMetadata, {Formatter, FormatterConfig}, AppnameKey])
   when is_atom(Formatter) ->
-    init([Level, {undefined, []}, {Formatter, FormatterConfig}, AppnameKey]);
-init([Level, {SDataId, MDKeys}, {Formatter, FormatterConfig}, AppnameKey])
+    init([Level, {undefined, []}, GlobalMetadata, {Formatter, FormatterConfig}, AppnameKey]);
+init([Level, {SDataId, MDKeys}, GlobalMetadata, {Formatter, FormatterConfig}, AppnameKey])
   when is_atom(Formatter) ->
     {ok, #state{
             log_level = level_to_mask(Level),
             sd_id = SDataId,
             metadata_keys = MDKeys,
+            global_meta = GlobalMetadata,
             formatter = Formatter,
             format_cfg = FormatterConfig,
             appname_key = get_appname_key(AppnameKey)}}.
@@ -207,9 +209,9 @@ get_structured_data(_Msg, #state{sd_id = undefined}) ->
     [];
 get_structured_data(_Msg, #state{metadata_keys = []}) ->
     [];
-get_structured_data(Msg, #state{sd_id = SDId, metadata_keys = MDKeys}) ->
+get_structured_data(Msg, #state{sd_id = SDId, metadata_keys = MDKeys, global_meta = GlobalMetadata}) ->
     try lager_msg:metadata(Msg) of
-        Metadata -> syslog_lib:get_structured_data(Metadata, SDId, MDKeys)
+        Metadata -> syslog_lib:get_structured_data(GlobalMetadata ++ Metadata, SDId, MDKeys)
     catch
         _:_ -> []
     end.
