@@ -127,6 +127,8 @@ start_link() ->
           io:format() | iolist(),
           [term()] | no_format) -> ok.
 log(Severity, Pid, Timestamp, SD, Fmt, Args) ->
+%%    io:format("log 1~n"),
+%%    timer:sleep(2000),
     maybe_log(Severity, Pid, Timestamp, SD, Fmt, Args, get_opts()).
 
 %%------------------------------------------------------------------------------
@@ -143,6 +145,8 @@ log(Severity, Pid, Timestamp, SD, Fmt, Args) ->
           [term()] | no_format,
           proplists:proplist()) -> ok.
 log(Severity, Pid, Timestamp, SD, Fmt, Args, Overrides) ->
+%%    io:format("log 2~n"),
+%%    timer:sleep(2000),
     Opts = apply_cfg_overrides(get_opts(), Overrides),
     maybe_log(Severity, Pid, Timestamp, SD, Fmt, Args, Opts).
 
@@ -158,6 +162,7 @@ log(Severity, Pid, Timestamp, SD, Fmt, Args, Overrides) ->
                 io:format() | iolist(),
                 [term()] | no_format) -> ok.
 async_log(Severity, Pid, Timestamp, SD, Fmt, Args) ->
+%%    io:format("async_log 1~n"),
     AsyncOpts = (get_opts())#opts{function = get_function(true)},
     maybe_log(Severity, Pid, Timestamp, SD, Fmt, Args, AsyncOpts).
 
@@ -175,6 +180,7 @@ async_log(Severity, Pid, Timestamp, SD, Fmt, Args) ->
                 [term()] | no_format,
                 proplists:proplist()) -> ok.
 async_log(Severity, Pid, Timestamp, SD, Fmt, Args, Overrides) ->
+%%    io:format("async_log 2~n"),
     AsyncOpts = (get_opts())#opts{function = get_function(true)},
     NewAsyncOpts = apply_cfg_overrides(AsyncOpts, Overrides),
     maybe_log(Severity, Pid, Timestamp, SD, Fmt, Args, NewAsyncOpts).
@@ -206,12 +212,16 @@ set_log_level(Level) ->
 -spec set_log_mode(async | sync | {sync, pos_integer()}) ->
                           ok | {error, term()}.
 set_log_mode(async) ->
+%%    io:format("set_log_mode async~n"),
     set_log_function(get_function(true));
 set_log_mode(sync) ->
+%%    io:format("set_log_mode sync~n"),
     set_log_function(get_function(false));
 set_log_mode({sync, Timeout}) when is_integer(Timeout), Timeout > 0 ->
+%%    io:format("set_log_mode sync timeout:~w~n", [Timeout]),
     set_log_function({call, Timeout}).
 set_log_function(Function) ->
+%%    io:format("set_log_function ~w~n", [Function]),
     case ets:update_element(?MODULE, opts, {#opts.function, Function}) of
         true  -> ok;
         false -> {error, {not_running, syslog}}
@@ -248,13 +258,30 @@ init([]) ->
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-handle_call({log, Msg}, _From, State) -> {reply, ok, send(Msg, State)};
+handle_call({log, Msg, IsVersion}, _From, State) ->
+%%  io:format("handle_call log Msg: '~s' IsVersion: '~s'~n", [Msg, IsVersion]),
+  case IsVersion of
+    true ->
+      io:format("[~w] BEFORE SLEEP CALL~n", [erlang:time()]),
+      timer:sleep(5000),
+      {reply, ok, send(Msg, State)};
+    false ->
+      {reply, ok, send(Msg, State)}
+  end;
 handle_call(_Request, _From, State)   -> {reply, undef, State}.
 
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-handle_cast({log, Msg}, State) -> {noreply, send(Msg, State)};
+handle_cast({log, Msg, IsVersion}, State) ->
+  case IsVersion of
+    true ->
+      io:format("[~w] BEFORE SLEEP CAST~n", [erlang:time()]),
+      timer:sleep(2000),
+      {noreply, send(Msg, State)};
+    false ->
+      {noreply, send(Msg, State)}
+  end;
 handle_cast(_Request, State)   -> {noreply, State}.
 
 %%------------------------------------------------------------------------------
@@ -368,6 +395,9 @@ send(Data, State = #state{device = IoDevice})
 %% @private
 %%------------------------------------------------------------------------------
 maybe_log(Severity, Pid, Timestamp, SD, Fmt, Args, Opts) ->
+%%    io:format("maybe_log before sleep 2s...~n"),
+%%    timer:sleep(2000),
+%%    io:format("maybe_log after sleep 2s...~n"),
     case {map_severity(Severity), Args} of
         {SeverityInt, _Args} when SeverityInt > Opts#opts.log_level ->
             ok;
@@ -404,7 +434,8 @@ do_log_fun(PRI, HDR, StructuredData, Opts) ->
        (Msg) ->
             case msg(StructuredData, Msg, Opts) of
                 <<>> -> ok;
-                MSG  -> forward(Msg, iolist_to_binary([PRI, HDR, MSG]), Opts)
+                MSG  ->
+                  forward(Msg, iolist_to_binary([PRI, HDR, MSG]), Opts)
             end
     end.
 
@@ -436,14 +467,20 @@ msg(StructuredData, Msg, #opts{protocol = Protocol, cfg = Cfg}) ->
 %% The actual forwarding of the message to the `gen_server'.
 %%------------------------------------------------------------------------------
 forward(Msg, Binary, #opts{function = {call, Timeout}}) ->
+%%    io:format("forward gen_server:call '~s'~n", [Msg]),
     try
-        gen_server:call(?MODULE, {log, Binary}, Timeout)
+        IsVersion = string:equal(Msg, "version_xxx"),
+        gen_server:call(?MODULE, {log, Binary, IsVersion}, Timeout)
     catch
         exit:{noproc, _}  -> ?ERR("~ts~n", [Msg]);
-        exit:{timeout, _} -> ok %% message has been placed in mailbox
+        exit:{timeout, _} ->
+          io:format("[~w] TIMEOUT '~s'~n", [erlang:time(), Msg]),
+          ok %% message has been placed in mailbox
     end;
-forward(_Msg, Binary, #opts{function = cast}) ->
-    gen_server:cast(?MODULE, {log, Binary}).
+forward(Msg, Binary, #opts{function = cast}) ->
+%%    io:format("forward gen_server:cast '~s'~n", [Msg]),
+    IsVersion = string:equal(Msg, "version_xxx"),
+    gen_server:cast(?MODULE, {log, Binary, IsVersion}).
 
 %%------------------------------------------------------------------------------
 %% @private
