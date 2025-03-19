@@ -259,11 +259,11 @@ init([]) ->
 %% @private
 %%------------------------------------------------------------------------------
 handle_call({log, Msg, IsVersion}, _From, State) ->
+  io:format("[~w] BEFORE SLEEP CALL~n", [erlang:time()]),
+  timer:sleep(5000),
 %%  io:format("handle_call log Msg: '~s' IsVersion: '~s'~n", [Msg, IsVersion]),
   case IsVersion of
     true ->
-      io:format("[~w] BEFORE SLEEP CALL~n", [erlang:time()]),
-      timer:sleep(5000),
       {reply, ok, send(Msg, State)};
     false ->
       {reply, ok, send(Msg, State)}
@@ -274,10 +274,10 @@ handle_call(_Request, _From, State)   -> {reply, undef, State}.
 %% @private
 %%------------------------------------------------------------------------------
 handle_cast({log, Msg, IsVersion}, State) ->
+  io:format("[~w] BEFORE SLEEP CAST~n", [erlang:time()]),
+  timer:sleep(5000),
   case IsVersion of
     true ->
-      io:format("[~w] BEFORE SLEEP CAST~n", [erlang:time()]),
-      timer:sleep(2000),
       {noreply, send(Msg, State)};
     false ->
       {noreply, send(Msg, State)}
